@@ -99,6 +99,15 @@ public class AttachmentServiceImpl extends AbstractCrudService<Attachment, Integ
                 predicates.add(criteriaBuilder.or(nameLike));
             }
 
+            if (attachmentQuery.getPath() != null) {
+                String likeCondition = "%" + attachmentQuery.getPath() + "%";
+
+
+                Predicate pathLike = criteriaBuilder.like(root.get("path"), likeCondition);
+
+                predicates.add(criteriaBuilder.or(pathLike));
+            }
+
             return query.where(predicates.toArray(new Predicate[0])).getRestriction();
         };
     }
@@ -197,6 +206,25 @@ public class AttachmentServiceImpl extends AbstractCrudService<Attachment, Integ
         return attachmentRepository.findAllType();
     }
 
+    /**
+     * 根据条件查附件
+     *
+     * @param attachmentQuery 查询对象
+     * @return 附件list
+     */
+    @Override
+    public List<Attachment> listByCondition(AttachmentQuery attachmentQuery) {
+        return attachmentRepository.findAll(buildSpecByQuery(attachmentQuery));
+    }
+
+    /**
+     * 列表删除
+     */
+    @Override
+    public void deleteByList(List<Attachment> attachmentList) {
+        attachmentRepository.deleteAll(attachmentList);
+    }
+
     @Override
     public Attachment create(Attachment attachment) {
         Assert.notNull(attachment, "Attachment must not be null");
@@ -228,7 +256,7 @@ public class AttachmentServiceImpl extends AbstractCrudService<Attachment, Integ
      * @return attachment type
      */
     @NonNull
-    private AttachmentType getAttachmentType() {
+    public AttachmentType getAttachmentType() {
         return Objects.requireNonNull(optionService
             .getEnumByPropertyOrDefault(AttachmentProperties.ATTACHMENT_TYPE, AttachmentType.class,
                 AttachmentType.LOCAL));

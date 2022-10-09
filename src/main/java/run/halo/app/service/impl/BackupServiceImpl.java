@@ -13,6 +13,9 @@ import cn.hutool.core.util.CharsetUtil;
 import cn.hutool.core.util.IdUtil;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.nio.charset.StandardCharsets;
@@ -31,22 +34,32 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.ZipOutputStream;
+
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.fileupload.FileItem;
+import org.apache.commons.fileupload.disk.DiskFileItem;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.lang.NonNull;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Assert;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.multipart.commons.CommonsMultipartFile;
+import run.halo.app.cache.AbstractStringCacheStore;
 import run.halo.app.config.properties.HaloProperties;
 import run.halo.app.event.options.OptionUpdatedEvent;
 import run.halo.app.event.theme.ThemeUpdatedEvent;
 import run.halo.app.exception.NotFoundException;
 import run.halo.app.exception.ServiceException;
+import run.halo.app.handler.file.AliOssFileHandler;
 import run.halo.app.handler.file.FileHandler;
+import run.halo.app.handler.file.FileHandlers;
 import run.halo.app.model.dto.BackupDTO;
+import run.halo.app.model.dto.UploadDTO;
 import run.halo.app.model.dto.post.BasePostDetailDTO;
 import run.halo.app.model.entity.Attachment;
 import run.halo.app.model.entity.Category;
@@ -69,6 +82,7 @@ import run.halo.app.model.entity.SheetMeta;
 import run.halo.app.model.entity.Tag;
 import run.halo.app.model.entity.ThemeSetting;
 import run.halo.app.model.entity.User;
+import run.halo.app.model.enums.AttachmentType;
 import run.halo.app.model.params.PostMarkdownParam;
 import run.halo.app.model.support.HaloConst;
 import run.halo.app.model.vo.PostMarkdownVO;
@@ -96,6 +110,7 @@ import run.halo.app.service.TagService;
 import run.halo.app.service.ThemeSettingService;
 import run.halo.app.service.UserService;
 import run.halo.app.utils.DateTimeUtils;
+import run.halo.app.utils.FileUtils;
 import run.halo.app.utils.HaloUtils;
 import run.halo.app.utils.JsonUtils;
 
@@ -168,6 +183,15 @@ public class BackupServiceImpl implements BackupService {
 
     private final ApplicationEventPublisher eventPublisher;
 
+    @Autowired
+    private FileHandlers fileHandler;
+
+    @Autowired
+    private AbstractStringCacheStore cacheStore;
+
+    @Autowired
+    private AliOssFileHandler ossFileHandler;
+
     public BackupServiceImpl(AttachmentService attachmentService, CategoryService categoryService,
         CommentBlackListService commentBlackListService, JournalService journalService,
         JournalCommentService journalCommentService, LinkService linkService, LogService logService,
@@ -231,7 +255,7 @@ public class BackupServiceImpl implements BackupService {
             Path haloZipPath = Files.createFile(haloZipFilePath);
 
             // Zip halo
-            run.halo.app.utils.FileUtils
+            FileUtils
                 .zip(Paths.get(this.haloProperties.getWorkDir()), haloZipPath);
 
             // Build backup dto
@@ -526,6 +550,42 @@ public class BackupServiceImpl implements BackupService {
         }
     }
 
+    /**
+     * 定时任务-备份文章
+     */
+    @Scheduled(cron = "0 0 23 L * ?")
+    public void backupArticle() {
+        cacheStore.put("scheduled", "true");
+        AttachmentType attachmentType = attachmentService.getAttachmentType();
+        // 先删再上传
+        fileHandler
+            .delete(ossFileHandler.getUpFilePathPrefix("backup").toString(), attachmentType);
+        PostMarkdownParam postMarkdownParam = new PostMarkdownParam();
+        postMarkdownParam.setNeedFrontMatter(true);
+        BackupDTO backupDTO = null;
+
+        try {
+            backupDTO = exportMarkdowns(postMarkdownParam);
+        } catch (IOException e) {
+            throw new RuntimeException("生成文章备份失败：", e);
+        }
+
+        File file = backupDTO.getMarkdownZipPath().toFile();
+        UploadDTO uploadDTO;
+        try {
+            FileInputStream fileInputStream = org.apache.commons.io.FileUtils.openInputStream(file);
+            uploadDTO = new UploadDTO(fileInputStream,
+                backupDTO.getFilename(), "application/x-zip-compressed",
+                backupDTO.getFileSize(),
+                FileHandler.FILE_TYPE_NORMAL, null, null, "backup");
+        } catch (IOException e) {
+            throw new RuntimeException("读取文章备份失败：", e);
+        }
+        fileHandler.upload(uploadDTO, attachmentType);
+        cacheStore.delete("scheduled");
+    }
+
+
     @Override
     public BackupDTO exportMarkdowns(PostMarkdownParam postMarkdownParam) throws IOException {
         // Query all Post data
@@ -578,18 +638,18 @@ public class BackupServiceImpl implements BackupService {
 
             // Zip temporary directory
             Path markdownFileTempPath = Paths.get(markdownFileTempPathName);
-            run.halo.app.utils.FileUtils.zip(markdownFileTempPath, markdownZipOut);
+            FileUtils.zip(markdownFileTempPath, markdownZipOut);
 
             // Zip upload sub-directory
             String uploadPathName =
                 FileHandler.normalizeDirectory(haloProperties.getWorkDir()) + UPLOAD_SUB_DIR;
             Path uploadPath = Paths.get(uploadPathName);
             if (Files.exists(uploadPath)) {
-                run.halo.app.utils.FileUtils.zip(uploadPath, markdownZipOut);
+                FileUtils.zip(uploadPath, markdownZipOut);
             }
 
             // Remove files in the temporary directory
-            run.halo.app.utils.FileUtils.deleteFolder(markdownFileTempPath);
+            FileUtils.deleteFolder(markdownFileTempPath);
 
             // Build backup dto
             return buildBackupDto(DATA_EXPORT_MARKDOWN_BASE_URI, markdownZipPath);
@@ -659,6 +719,7 @@ public class BackupServiceImpl implements BackupService {
             backup.setFilename(backupFileName);
             backup.setUpdateTime(Files.getLastModifiedTime(backupPath).toMillis());
             backup.setFileSize(Files.size(backupPath));
+            backup.setMarkdownZipPath(backupPath);
         } catch (IOException e) {
             throw new ServiceException("Failed to access file " + backupPath, e);
         }

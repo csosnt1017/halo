@@ -12,6 +12,7 @@ import org.springframework.util.CollectionUtils;
 import org.springframework.web.multipart.MultipartFile;
 import run.halo.app.exception.FileOperationException;
 import run.halo.app.exception.RepeatTypeException;
+import run.halo.app.model.dto.UploadDTO;
 import run.halo.app.model.entity.Attachment;
 import run.halo.app.model.enums.AttachmentType;
 import run.halo.app.model.support.UploadResult;
@@ -53,6 +54,12 @@ public class FileHandlers {
         return getSupportedType(attachmentType).upload(file);
     }
 
+    @NonNull
+    public UploadResult upload(@NonNull UploadDTO uploadDTO,
+        @NonNull AttachmentType attachmentType) {
+        return getSupportedType(attachmentType).upload(uploadDTO);
+    }
+
     /**
      * Deletes attachment.
      *
@@ -64,6 +71,21 @@ public class FileHandlers {
         Assert.notNull(attachment, "Attachment must not be null");
         getSupportedType(attachment.getType())
             .delete(attachment.getFileKey());
+    }
+
+    /**
+     * Deletes attachments.
+     *
+     * @param prefix 文件key前缀
+     * @param attachmentType 文件存储类型
+     * @throws FileOperationException throws when fail to delete attachment or no available file
+     * handler to delete it
+     */
+    public void delete(String prefix,@NonNull AttachmentType attachmentType) {
+        Assert.notNull(prefix, "Prefix must not be null");
+        Assert.notNull(attachmentType, "AttachmentType must not be null");
+        getSupportedType(attachmentType)
+            .deleteByPrefix(prefix);
     }
 
     /**

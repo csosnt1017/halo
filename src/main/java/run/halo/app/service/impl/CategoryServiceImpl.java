@@ -25,6 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.Assert;
 import org.springframework.util.CollectionUtils;
+import run.halo.app.cache.AbstractStringCacheStore;
 import run.halo.app.exception.AlreadyExistsException;
 import run.halo.app.exception.NotFoundException;
 import run.halo.app.exception.UnsupportedException;
@@ -68,6 +69,9 @@ public class CategoryServiceImpl extends AbstractCrudService<Category, Integer>
     private PostService postService;
 
     private final AuthenticationService authenticationService;
+
+    @Autowired
+    private AbstractStringCacheStore cacheStore;
 
     public CategoryServiceImpl(CategoryRepository categoryRepository,
         PostCategoryService postCategoryService,
@@ -399,10 +403,10 @@ public class CategoryServiceImpl extends AbstractCrudService<Category, Integer>
      * @param categoryList category list
      */
     private void doFilterEncryptCategory(List<CategoryVO> categoryList) {
-        if (CollectionUtil.isEmpty(categoryList)) {
+        if (CollectionUtil.isEmpty(categoryList) ||
+            Boolean.TRUE.toString().equals(cacheStore.get("scheduled").orElse(null))) {
             return;
         }
-
         for (CategoryVO categoryVO : categoryList) {
             if (!authenticationService.categoryAuthentication(categoryVO.getId(), null)) {
                 // if parent category is not certified, the child category is not displayed.
@@ -434,9 +438,11 @@ public class CategoryServiceImpl extends AbstractCrudService<Category, Integer>
 
             collectorList.add(category);
 
-            if (doNotCollectEncryptedCategory
-                && !authenticationService.categoryAuthentication(category.getId(), null)) {
-                continue;
+            if(!Boolean.TRUE.toString().equals(cacheStore.get("scheduled").orElse(null))) {
+                if (doNotCollectEncryptedCategory
+                    && !authenticationService.categoryAuthentication(category.getId(), null)) {
+                    continue;
+                }
             }
 
             if (CollectionUtil.isNotEmpty(categoryVO.getChildren())) {

@@ -82,4 +82,27 @@ public interface AttachmentService extends CrudService<Attachment, Integer> {
      * @return list of type.
      */
     List<AttachmentType> listAllType();
+
+    /**
+     * 根据条件查附件
+     *
+     * @param attachmentQuery 查询对象
+     * @return 附件list
+     */
+    List<Attachment> listByCondition(AttachmentQuery attachmentQuery);
+
+    /**
+     * 列表删除
+     *
+     * @param attachmentList 附件列表
+     */
+    void deleteByList(List<Attachment> attachmentList);
+
+    /**
+     * Get attachment type from options.
+     *
+     * @return attachment type
+     */
+    @NonNull
+    AttachmentType getAttachmentType();
 }

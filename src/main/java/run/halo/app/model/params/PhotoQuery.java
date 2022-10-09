@@ -1,6 +1,7 @@
 package run.halo.app.model.params;
 
 import lombok.Data;
+import java.util.List;
 
 /**
  * Photo query params.
@@ -17,4 +18,6 @@ public class PhotoQuery {
     private String keyword;
 
     private String team;
+
+    private List<String> urlList;
 }

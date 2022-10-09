@@ -14,6 +14,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.Assert;
 import org.springframework.web.multipart.MultipartFile;
 import run.halo.app.exception.FileOperationException;
+import run.halo.app.model.dto.UploadDTO;
 import run.halo.app.model.enums.AttachmentType;
 import run.halo.app.model.properties.HuaweiObsProperties;
 import run.halo.app.model.support.UploadResult;
@@ -139,6 +140,18 @@ public class HuaweiObsFileHandler implements FileHandler {
         }
     }
 
+    /**
+     * Uploads file.
+     *
+     * @param uploadDTO 上传DTO
+     * @return upload result
+     * @throws FileOperationException throws when fail to upload the file
+     */
+    @Override
+    public UploadResult upload(UploadDTO uploadDTO) {
+        return null;
+    }
+
     @Override
     public void delete(@NonNull String key) {
         Assert.notNull(key, "File key must not be blank");
@@ -167,6 +180,16 @@ public class HuaweiObsFileHandler implements FileHandler {
                 log.error(e.getMessage());
             }
         }
+    }
+
+    /**
+     * Deletes files.
+     *
+     * @param prefix file key prefix
+     */
+    @Override
+    public void deleteByPrefix(String prefix) {
+
     }
 
     @Override

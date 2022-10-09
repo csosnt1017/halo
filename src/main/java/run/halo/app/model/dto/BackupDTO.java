@@ -1,6 +1,7 @@
 package run.halo.app.model.dto;
 
 import lombok.Data;
+import java.nio.file.Path;
 
 /**
  * @author ryanwang
@@ -16,4 +17,6 @@ public class BackupDTO {
     private Long updateTime;
 
     private Long fileSize;
+
+    private Path markdownZipPath;
 }

@@ -27,6 +27,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.Assert;
 import org.springframework.web.multipart.MultipartFile;
 import run.halo.app.exception.FileOperationException;
+import run.halo.app.model.dto.UploadDTO;
 import run.halo.app.model.enums.AttachmentType;
 import run.halo.app.model.properties.QiniuOssProperties;
 import run.halo.app.model.support.UploadResult;
@@ -160,6 +161,18 @@ public class QiniuOssFileHandler implements FileHandler {
         }
     }
 
+    /**
+     * Uploads file.
+     *
+     * @param uploadDTO 上传DTO
+     * @return upload result
+     * @throws FileOperationException throws when fail to upload the file
+     */
+    @Override
+    public UploadResult upload(UploadDTO uploadDTO) {
+        return null;
+    }
+
     @Override
     public void delete(String key) {
         Assert.notNull(key, "File key must not be blank");
@@ -191,6 +204,16 @@ public class QiniuOssFileHandler implements FileHandler {
             log.error("Qiniu oss error response: [{}]", e.response);
             throw new FileOperationException("附件 " + key + " 从七牛云删除失败", e);
         }
+    }
+
+    /**
+     * Deletes files.
+     *
+     * @param prefix file key prefix
+     */
+    @Override
+    public void deleteByPrefix(String prefix) {
+
     }
 
     @Override

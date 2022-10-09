@@ -14,6 +14,7 @@ import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 import org.springframework.web.multipart.MultipartFile;
 import run.halo.app.exception.FileOperationException;
+import run.halo.app.model.dto.UploadDTO;
 import run.halo.app.model.enums.AttachmentType;
 import run.halo.app.model.support.UploadResult;
 import run.halo.app.utils.ImageUtils;
@@ -27,6 +28,16 @@ import run.halo.app.utils.ImageUtils;
 public interface FileHandler {
 
     MediaType IMAGE_TYPE = MediaType.valueOf("image/*");
+
+    /**
+     * 普通附件
+     */
+    String FILE_TYPE_NORMAL = "normal";
+
+    /**
+     * p站图片
+     */
+    String FILE_TYPE_PIXIV = "pixiv";
 
     /**
      * Normalize directory full name, ensure the end path separator.
@@ -52,6 +63,16 @@ public interface FileHandler {
     UploadResult upload(@NonNull MultipartFile file);
 
     /**
+     * Uploads file.
+     *
+     * @param uploadDTO 上传DTO
+     * @return upload result
+     * @throws FileOperationException throws when fail to upload the file
+     */
+    @NonNull
+    UploadResult upload(@NonNull UploadDTO uploadDTO);
+
+    /**
      * Check if the current file is an image.
      *
      * @param file multipart file must not be null
@@ -59,7 +80,11 @@ public interface FileHandler {
      */
     default boolean isImageType(@NonNull MultipartFile file) {
         String mediaType = file.getContentType();
-        return mediaType != null && IMAGE_TYPE.includes(MediaType.valueOf(mediaType));
+        return isImageType(mediaType);
+    }
+
+    default boolean isImageType(@NonNull String mediaType) {
+        return IMAGE_TYPE.includes(MediaType.valueOf(mediaType));
     }
 
     /**
@@ -89,6 +114,30 @@ public interface FileHandler {
         }
     }
 
+    default void handleImageMetadata(@NonNull InputStream is, @NonNull String mediaType,
+    @NonNull UploadResult uploadResult,
+        @Nullable Supplier<String> thumbnailSupplier) throws IOException {
+        if (isImageType(mediaType)) {
+            // Handle image
+            try  {
+                ImageReader image = ImageUtils.getImageReaderFromFile(is, uploadResult.getSuffix());
+                uploadResult.setWidth(image.getWidth(0));
+                uploadResult.setHeight(image.getHeight(0));
+                if (thumbnailSupplier != null) {
+                    uploadResult.setThumbPath(thumbnailSupplier.get());
+                }
+            } catch (IOException | OutOfMemoryError e) {
+                // ignore IOException and OOM
+                LoggerFactory.getLogger(getClass()).warn("Failed to fetch image meta data", e);
+            }finally {
+                is.close();
+            }
+        }
+        if (StringUtils.isBlank(uploadResult.getThumbPath())) {
+            uploadResult.setThumbPath(uploadResult.getFilePath());
+        }
+    }
+
     /**
      * Deletes file.
      *
@@ -96,6 +145,13 @@ public interface FileHandler {
      * @throws FileOperationException throws when fail to delete the file
      */
     void delete(@NonNull String key);
+
+    /**
+     * Deletes files.
+     *
+     * @param prefix file key prefix
+     */
+    void deleteByPrefix(String prefix);
 
     /**
      * Get attachment type is supported.

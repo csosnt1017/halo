@@ -1,15 +1,21 @@
 package run.halo.app.service.impl;
 
+import com.google.common.collect.Sets;
 import freemarker.template.Configuration;
 import freemarker.template.TemplateModelException;
+import java.net.URLDecoder;
+import java.nio.charset.Charset;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Example;
 import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Service;
@@ -21,6 +27,7 @@ import run.halo.app.handler.theme.config.support.Group;
 import run.halo.app.handler.theme.config.support.Item;
 import run.halo.app.model.entity.ThemeSetting;
 import run.halo.app.repository.ThemeSettingRepository;
+import run.halo.app.service.PixivService;
 import run.halo.app.service.ThemeService;
 import run.halo.app.service.ThemeSettingService;
 import run.halo.app.service.base.AbstractCrudService;
@@ -42,6 +49,15 @@ public class ThemeSettingServiceImpl extends AbstractCrudService<ThemeSetting, I
     private final ThemeService themeService;
 
     private final Configuration configuration;
+
+    @Autowired
+    private PixivService pixivService;
+
+    private static final Set<String> IMG_SETTING_SET =
+        Sets.newHashSet("archives_patternimg", "photos_patternimg", "journals_patternimg",
+            "links_patternimg", "searh_patternimg",
+            "tag_patternimg", "category_patternimg", "feature1_img", "feature2_img",
+            "feature3_img");
 
     public ThemeSettingServiceImpl(ThemeSettingRepository themeSettingRepository,
         ThemeService themeService,
@@ -109,6 +125,15 @@ public class ThemeSettingServiceImpl extends AbstractCrudService<ThemeSetting, I
         if (CollectionUtils.isEmpty(settings)) {
             return;
         }
+
+        // 复制P站图片
+        Map<String, String> pixivImgMap =
+            settings.entrySet().stream().filter(entry -> IMG_SETTING_SET.contains(entry.getKey()) &&
+                entry.getValue().toString().contains("/pixiv/")).collect(Collectors.toMap(
+                Map.Entry::getKey, newEntry -> URLDecoder.decode((String) newEntry.getValue(), Charset.defaultCharset())));
+        Map<String, String> newPixivImgMap = pixivService.copyPixivPhoto(pixivImgMap);
+        newPixivImgMap.forEach(settings::put);
+
 
         // Save the settings
         settings.forEach((key, value) -> save(key, value.toString(), themeId));

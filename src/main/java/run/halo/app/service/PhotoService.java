@@ -79,4 +79,17 @@ public interface PhotoService extends CrudService<Photo, Integer> {
      * @return list of teams
      */
     List<String> listAllTeams();
+
+    /**
+     * 根据条件查询
+     * @param photoQuery 查询对象
+     * @return List<Photo>
+     */
+    List<Photo> listByCondition(PhotoQuery photoQuery);
+
+    /**
+     * 删除图片
+     * @param photoList 图片列表
+     */
+    void deleteByList(List<Photo> photoList);
 }

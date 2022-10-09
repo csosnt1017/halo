@@ -22,6 +22,7 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 import run.halo.app.exception.FileOperationException;
 import run.halo.app.exception.ServiceException;
+import run.halo.app.model.dto.UploadDTO;
 import run.halo.app.model.enums.AttachmentType;
 import run.halo.app.model.properties.SmmsProperties;
 import run.halo.app.model.support.HaloConst;
@@ -156,6 +157,18 @@ public class SmmsFileHandler implements FileHandler {
         return result;
     }
 
+    /**
+     * Uploads file.
+     *
+     * @param uploadDTO 上传DTO
+     * @return upload result
+     * @throws FileOperationException throws when fail to upload the file
+     */
+    @Override
+    public UploadResult upload(UploadDTO uploadDTO) {
+        return null;
+    }
+
     @Override
     public void delete(String key) {
         Assert.hasText(key, "Deleting key must not be blank");
@@ -178,6 +191,16 @@ public class SmmsFileHandler implements FileHandler {
 
         // Deleted successfully or have been deleted already
         log.info("File was deleted successfully or had been deleted already");
+    }
+
+    /**
+     * Deletes files.
+     *
+     * @param prefix file key prefix
+     */
+    @Override
+    public void deleteByPrefix(String prefix) {
+
     }
 
     @Override

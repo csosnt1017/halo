@@ -59,6 +59,11 @@ public class HaloConst {
     public static final String FILE_SEPARATOR = File.separator;
 
     /**
+     * like2021-09-18
+     */
+    public static final String DATE_SEPARATOR = "-";
+
+    /**
      * Post password template name.
      */
     public static final String POST_PASSWORD_TEMPLATE = "post_password";

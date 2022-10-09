@@ -84,7 +84,7 @@ ext {
     swaggerVersion = "3.0.0"
     commonsFileUploadVersion = "1.4"
     commonsLangVersion = "3.10"
-    httpclientVersion = "4.5.12"
+    httpclientVersion = "4.5.2"
     dataformatYamlVersion = "2.11.0"
     jgitVersion = "5.9.0.202009080501-r"
     flexmarkVersion = "0.62.2"
@@ -98,6 +98,7 @@ ext {
     huaweiObsVersion = "3.19.7"
     templateInheritanceVersion = "0.4.RELEASE"
     jsoupVersion = "1.13.1"
+    fastjsonVersion = "1.2.47"
 }
 
 dependencies {
@@ -147,6 +148,7 @@ dependencies {
     implementation "net.sf.image4j:image4j:$image4jVersion"
     implementation "org.flywaydb:flyway-core:$flywayVersion"
     implementation "com.google.zxing:core:$zxingVersion"
+    implementation "com.alibaba:fastjson:$fastjsonVersion"
 
     implementation "org.iq80.leveldb:leveldb:$levelDbVersion"
     runtimeOnly "com.h2database:h2:$h2Version"

@@ -49,4 +49,6 @@ public class PhotoController {
         PhotoQuery photoQuery) {
         return photoService.pageDtosBy(pageable, photoQuery);
     }
+
+
 }

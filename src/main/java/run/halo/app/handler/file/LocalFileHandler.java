@@ -1,5 +1,6 @@
 package run.halo.app.handler.file;
 
+import static run.halo.app.model.support.HaloConst.DATE_SEPARATOR;
 import static run.halo.app.model.support.HaloConst.FILE_SEPARATOR;
 
 import java.awt.image.BufferedImage;
@@ -12,18 +13,25 @@ import java.util.Calendar;
 import java.util.Objects;
 import lombok.extern.slf4j.Slf4j;
 import net.coobird.thumbnailator.Thumbnails;
+import org.apache.commons.lang3.StringUtils;
+import org.jetbrains.annotations.NotNull;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
+import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Component;
 import org.springframework.util.Assert;
+import org.springframework.util.FileCopyUtils;
 import org.springframework.web.multipart.MultipartFile;
 import run.halo.app.config.properties.HaloProperties;
 import run.halo.app.exception.FileOperationException;
+import run.halo.app.model.dto.UploadDTO;
 import run.halo.app.model.enums.AttachmentType;
 import run.halo.app.model.support.UploadResult;
 import run.halo.app.service.OptionService;
 import run.halo.app.utils.FilenameUtils;
 import run.halo.app.utils.HaloUtils;
 import run.halo.app.utils.ImageUtils;
+import javax.imageio.ImageReader;
 
 /**
  * Local file handler.
@@ -35,11 +43,10 @@ import run.halo.app.utils.ImageUtils;
 @Slf4j
 @Component
 public class LocalFileHandler implements FileHandler {
-
     /**
      * Upload sub directory.
      */
-    private static final String UPLOAD_SUB_DIR = "upload/";
+    public static final String UPLOAD_SUB_DIR = "upload/";
 
     private static final String THUMBNAIL_SUFFIX = "-thumbnail";
 
@@ -55,7 +62,7 @@ public class LocalFileHandler implements FileHandler {
 
     private final OptionService optionService;
 
-    private final String workDir;
+    public final String workDir;
 
     public LocalFileHandler(OptionService optionService,
         HaloProperties haloProperties) {
@@ -63,7 +70,6 @@ public class LocalFileHandler implements FileHandler {
 
         // Get work dir
         workDir = FileHandler.normalizeDirectory(haloProperties.getWorkDir());
-
         // Check work directory
         checkWorkDir();
     }
@@ -83,87 +89,114 @@ public class LocalFileHandler implements FileHandler {
         }
     }
 
+    @NotNull
     @Override
-    public UploadResult upload(MultipartFile file) {
+    public UploadResult upload(@NotNull MultipartFile file) {
         Assert.notNull(file, "Multipart file must not be null");
+        UploadResult uploadResult = null;
+        try {
+            UploadDTO uploadDTO = new UploadDTO(file.getInputStream(), file.getOriginalFilename(),
+                file.getContentType(), file.getSize(), FILE_TYPE_NORMAL, null, null,null);
+            uploadResult = upload(uploadDTO);
+            return uploadResult;
+        } catch (IOException ex) {
+            throw new FileOperationException("上传附件失败").setErrorData(uploadResult);
+        }
+    }
 
-        // Get current time
-        Calendar current = Calendar.getInstance(optionService.getLocale());
-        // Get month and day of month
-        int year = current.get(Calendar.YEAR);
-        int month = current.get(Calendar.MONTH) + 1;
+    /**
+     * 上传p站文件
+     *
+     * @param uploadDTO dto
+     */
+    public UploadResult uploadPixiv(UploadDTO uploadDTO) {
+        Assert.notNull(uploadDTO.getIn(), "InputStream must not be null");
+        UploadResult uploadResult;
+        try {
+            uploadDTO.setType(FILE_TYPE_PIXIV);
+            uploadResult = upload(uploadDTO);
+        } catch (Exception ex) {
+            log.error("p站图片上传失败");
+            throw new RuntimeException("p站图片上传失败");
+        }
+        return uploadResult;
+    }
 
-        String monthString = month < 10 ? "0" + month : String.valueOf(month);
-
-        // Build directory
-        String subDir = UPLOAD_SUB_DIR + year + FILE_SEPARATOR + monthString + FILE_SEPARATOR;
-
+    @NotNull
+    public UploadResult upload(UploadDTO uploadDTO){
+        String originalFilename = uploadDTO.getOriginalFilename();
+        InputStream in = uploadDTO.getIn();
         String originalBasename =
-            FilenameUtils.getBasename(Objects.requireNonNull(file.getOriginalFilename()));
+            FilenameUtils.getBasename(Objects.requireNonNull(originalFilename));
 
         // Get basename
         String basename = originalBasename + '-' + HaloUtils.randomUUIDWithoutDash();
 
         // Get extension
-        String extension = FilenameUtils.getExtension(file.getOriginalFilename());
+        String extension = FilenameUtils.getExtension(originalFilename);
 
         log.debug("Base name: [{}], extension: [{}] of original filename: [{}]", basename,
-            extension, file.getOriginalFilename());
+            extension, originalFilename);
+
+        String subDir = getSubDir(uploadDTO.getType());
 
         // Build sub file path
         String subFilePath = subDir + basename + '.' + extension;
-
         // Get upload path
         Path uploadPath = Paths.get(workDir, subFilePath);
 
-        log.info("Uploading file: [{}]to directory: [{}]", file.getOriginalFilename(),
-            uploadPath.toString());
-
+        // TODO Synchronize here
+        // Create directory
         try {
-            // TODO Synchronize here
-            // Create directory
             Files.createDirectories(uploadPath.getParent());
             Files.createFile(uploadPath);
-
             // Upload this file
-            file.transferTo(uploadPath);
+            FileCopyUtils.copy(in, Files.newOutputStream(uploadPath));
+        } catch (IOException e) {
+            throw new RuntimeException("文件创建失败：",e);
+        }
 
-            // Build upload result
-            UploadResult uploadResult = new UploadResult();
-            uploadResult.setFilename(originalBasename);
-            uploadResult.setFilePath(subFilePath);
-            uploadResult.setKey(subFilePath);
-            uploadResult.setSuffix(extension);
-            uploadResult
-                .setMediaType(MediaType.valueOf(Objects.requireNonNull(file.getContentType())));
-            uploadResult.setSize(file.getSize());
-
-            // TODO refactor this: if image is svg ext. extension
-            handleImageMetadata(file, uploadResult, () -> {
-                // Upload a thumbnail
-                final String thumbnailBasename = basename + THUMBNAIL_SUFFIX;
-                final String thumbnailSubFilePath = subDir + thumbnailBasename + '.' + extension;
-                final Path thumbnailPath = Paths.get(workDir + thumbnailSubFilePath);
-                try (InputStream is = file.getInputStream()) {
+        // Build upload result
+        UploadResult uploadResult = new UploadResult();
+        uploadResult.setFilename(originalBasename);
+        uploadResult.setFilePath(subFilePath);
+        uploadResult.setKey(subFilePath);
+        uploadResult.setSuffix(extension);
+        uploadResult
+            .setMediaType(MediaType.valueOf(Objects.requireNonNull(uploadDTO.getContentType())));
+        uploadResult.setSize(uploadDTO.getSize());
+        uploadResult.setThumbPath(subFilePath);
+        if (IMAGE_TYPE.includes(MediaType.valueOf(uploadDTO.getContentType()))) {
+            final String thumbnailBasename = basename + THUMBNAIL_SUFFIX;
+            final String thumbnailSubFilePath =
+                subDir + thumbnailBasename + '.' + extension;
+            final Path thumbnailPath = Paths.get(workDir + thumbnailSubFilePath);
+            try {
+                if (uploadDTO.getWidth() != null && uploadDTO.getHeight() != null) {
+                    uploadResult.setWidth(uploadDTO.getWidth());
+                    uploadResult.setHeight(uploadDTO.getHeight());
+                } else {
+                    ImageReader image =
+                        ImageUtils.getImageReaderFromFile(in, uploadResult.getSuffix());
+                    uploadResult.setWidth(image.getWidth(0));
+                    uploadResult.setHeight(image.getHeight(0));
                     // Generate thumbnail
-                    BufferedImage originalImage = ImageUtils.getImageFromFile(is, extension);
+                    BufferedImage originalImage = ImageUtils.getImageFromFile(in, extension);
+                    if (originalImage == null) {
+                        return uploadResult;
+                    }
                     boolean result = generateThumbnail(originalImage, thumbnailPath, extension);
                     if (result) {
-                        // Set thumb path
-                        return thumbnailSubFilePath;
+                        uploadResult.setThumbPath(thumbnailSubFilePath);
                     }
-                } catch (Throwable e) {
-                    log.warn("Failed to open image file.", e);
                 }
-                return subFilePath;
-            });
-
-            log.info("Uploaded file: [{}] to directory: [{}] successfully",
-                file.getOriginalFilename(), uploadPath.toString());
-            return uploadResult;
-        } catch (IOException e) {
-            throw new FileOperationException("上传附件失败").setErrorData(uploadPath);
+            } catch (Throwable e) {
+                log.warn("Failed to open image file.", e);
+            }
         }
+        log.info("Uploaded file: [{}] to directory: [{}] successfully",
+            originalFilename, uploadPath.toString());
+        return uploadResult;
     }
 
     @Override
@@ -200,6 +233,16 @@ public class LocalFileHandler implements FileHandler {
         }
     }
 
+    /**
+     * Deletes files.
+     *
+     * @param prefix file key prefix
+     */
+    @Override
+    public void deleteByPrefix(String prefix) {
+
+    }
+
     @Override
     public AttachmentType getAttachmentType() {
         return AttachmentType.LOCAL;
@@ -225,9 +268,41 @@ public class LocalFileHandler implements FileHandler {
             // Ignore the error
             log.warn("Failed to generate thumbnail: " + thumbPath, t);
         } finally {
-            // Disposes of this graphics context and releases any system resources that it is using.
+            // Disposes of this graphics context and releases any system resources that it is
+            // using.
             originalImage.getGraphics().dispose();
         }
         return result;
+    }
+
+    private String getSubDir(String type) {
+        StringBuilder stringBuilder = new StringBuilder(UPLOAD_SUB_DIR);
+        // Get current time
+        Calendar current = Calendar.getInstance(optionService.getLocale());
+        // Get month and day of month
+        int year = current.get(Calendar.YEAR);
+        int month = current.get(Calendar.MONTH) + 1;
+        int day = current.get(Calendar.DAY_OF_MONTH);
+
+        String monthString = month < 10 ? "0" + month : String.valueOf(month);
+        switch (type) {
+            case FILE_TYPE_PIXIV:
+                stringBuilder.append(FILE_TYPE_PIXIV)
+                    .append(FILE_SEPARATOR)
+                    .append(year)
+                    .append(DATE_SEPARATOR)
+                    .append(monthString)
+                    .append(DATE_SEPARATOR)
+                    .append(day)
+                    .append(FILE_SEPARATOR);
+                break;
+            default:
+                stringBuilder.append(year)
+                    .append(DATE_SEPARATOR)
+                    .append(monthString)
+                    .append(FILE_SEPARATOR);
+                break;
+        }
+        return stringBuilder.toString();
     }
 }

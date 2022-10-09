@@ -20,4 +20,6 @@ public class AttachmentQuery {
     private String mediaType;
 
     private AttachmentType attachmentType;
+
+    private String path;
 }
